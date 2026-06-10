@@ -14,6 +14,7 @@ from src.api.models import (
     QueryResponse,
     Source,
 )
+from src.cache.semantic import semantic_cache
 from src.graph.client import Neo4jClient
 from src.utils.logger import get_logger
 
@@ -42,6 +43,26 @@ async def query(request: QueryRequest) -> QueryResponse:
         user_id=request.user_id,
     )
 
+    cached = await semantic_cache.lookup(request.query)
+    if cached:
+        elapsed_ms = (time.perf_counter() - start_time) * 1000
+        return QueryResponse(
+            answer=cached.get("answer", ""),
+            sources=[
+                Source(**s) if isinstance(s, dict) else s
+                for s in cached.get("sources", [])
+            ],
+            agent_trace=AgentTrace(
+                router_decision=cached.get("router_decision", "cache"),
+                crag_confidence_score=1.0,
+                retrieval_attempts=cached.get("retrieval_attempts", 0),
+            ),
+            metrics=QueryMetrics(
+                latency_ms=round(elapsed_ms, 2),
+                tokens_used=0,
+            ),
+        )
+
     thread_id = str(uuid.uuid4())
     initial_state = make_initial_state(
         query=request.query,
@@ -67,7 +88,7 @@ async def query(request: QueryRequest) -> QueryResponse:
             for s in sources_raw
         ]
 
-        return QueryResponse(
+        response_data = QueryResponse(
             answer=result.get("answer", ""),
             sources=sources,
             agent_trace=AgentTrace(
@@ -82,6 +103,18 @@ async def query(request: QueryRequest) -> QueryResponse:
                 tokens_used=result.get("tokens_used", 0),
             ),
         )
+
+        await semantic_cache.store(
+            request.query,
+            {
+                "answer": response_data.answer,
+                "sources": [s.model_dump() for s in response_data.sources],
+                "router_decision": response_data.agent_trace.router_decision,
+                "retrieval_attempts": response_data.agent_trace.retrieval_attempts,
+            },
+        )
+
+        return response_data
 
     except Exception as exc:
         logger.error("pipeline_failed", error=str(exc), query=request.query[:60])

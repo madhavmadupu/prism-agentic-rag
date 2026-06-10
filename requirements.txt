@@ -27,6 +27,13 @@ neo4j>=5.20.0
 # ── MCP & Live Data ──
 yfinance>=0.1.70
 
+# ── Caching ──
+redis>=5.2.0
+
+# ── Evaluation ──
+ragas>=0.2.0
+numpy>=1.26.0
+
 # ── Utilities ──
 tiktoken>=0.8.0
 python-multipart>=0.0.12
