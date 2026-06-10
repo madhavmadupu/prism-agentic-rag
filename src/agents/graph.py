@@ -7,6 +7,8 @@ from src.agents.aggregator import ContextAggregator
 from src.agents.crag_node import CRAGNode
 from src.agents.generator import AnswerGenerator
 from src.agents.graph_node import GraphNode
+from src.agents.mcp_node import MCPNode
+from src.agents.multimodal_node import MultimodalNode
 from src.agents.retrieval_node import RetrievalNode
 from src.agents.router import AgenticRouter
 from src.agents.state import AgentState
@@ -19,6 +21,8 @@ def build_prism_graph() -> StateGraph:
     router = AgenticRouter()
     vector_retrieval = RetrievalNode()
     graph_retrieval = GraphNode()
+    mcp_retrieval = MCPNode()
+    multimodal_retrieval = MultimodalNode()
     aggregator = ContextAggregator()
     crag = CRAGNode()
     generator = AnswerGenerator()
@@ -28,6 +32,8 @@ def build_prism_graph() -> StateGraph:
     workflow.add_node("classify_query", router.classify)
     workflow.add_node("retrieve_vector", vector_retrieval.run)
     workflow.add_node("retrieve_graph", graph_retrieval.run)
+    workflow.add_node("retrieve_mcp", mcp_retrieval.run)
+    workflow.add_node("retrieve_multimodal", multimodal_retrieval.run)
     workflow.add_node("aggregate_context", aggregator.aggregate)
     workflow.add_node("evaluate_confidence", crag.evaluate)
     workflow.add_node("rewrite_query", crag.rewrite_query)
@@ -38,6 +44,10 @@ def build_prism_graph() -> StateGraph:
     def route_by_decision(state: AgentState) -> str:
         decision = state.get("router_decision", "vector").lower()
 
+        if "multimodal" in decision:
+            return "multimodal"
+        if "mcp" in decision:
+            return "mcp"
         if "graph" in decision and "vector" not in decision:
             return "graph"
         if "vector" in decision:
@@ -52,11 +62,14 @@ def build_prism_graph() -> StateGraph:
         {
             "vector": "retrieve_vector",
             "graph": "retrieve_graph",
+            "mcp": "retrieve_mcp",
+            "multimodal": "retrieve_multimodal",
         },
     )
 
-    workflow.add_edge("retrieve_vector", "aggregate_context")
-    workflow.add_edge("retrieve_graph", "aggregate_context")
+    for node in ("retrieve_vector", "retrieve_graph", "retrieve_mcp", "retrieve_multimodal"):
+        workflow.add_edge(node, "aggregate_context")
+
     workflow.add_edge("aggregate_context", "evaluate_confidence")
 
     workflow.add_conditional_edges(

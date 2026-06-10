@@ -3,7 +3,7 @@ from __future__ import annotations
 import time
 import uuid
 
-from fastapi import APIRouter
+from fastapi import APIRouter, File, Form, UploadFile
 
 from src.agents.graph import prism_app
 from src.agents.state import make_initial_state
@@ -88,6 +88,81 @@ async def query(request: QueryRequest) -> QueryResponse:
         elapsed_ms = (time.perf_counter() - start_time) * 1000
         return QueryResponse(
             answer="An error occurred while processing your query. Please try again.",
+            agent_trace=AgentTrace(
+                router_decision="error",
+                crag_confidence_score=0.0,
+                retrieval_attempts=0,
+            ),
+            metrics=QueryMetrics(
+                latency_ms=round(elapsed_ms, 2),
+                tokens_used=0,
+            ),
+        )
+
+
+@router.post("/api/v1/query/multimodal", response_model=QueryResponse)
+async def query_multimodal(
+    query: str = Form(min_length=1, max_length=4096),
+    file: UploadFile = File(...),
+    mode: str = Form("auto"),
+) -> QueryResponse:
+    start_time = time.perf_counter()
+
+    logger.info(
+        "multimodal_query_received",
+        query=query[:100],
+        filename=file.filename,
+        content_type=file.content_type,
+    )
+
+    image_bytes = await file.read()
+    thread_id = str(uuid.uuid4())
+    initial_state = make_initial_state(
+        query=query,
+        mode=mode,
+        include_multimodal=True,
+    )
+    initial_state["multimodal_data"] = {
+        "image_bytes": image_bytes,
+        "mime_type": file.content_type or "image/png",
+        "context": query,
+    }
+
+    try:
+        result = await prism_app.ainvoke(
+            initial_state,
+            config={"configurable": {"thread_id": thread_id}},
+        )
+
+        elapsed_ms = (time.perf_counter() - start_time) * 1000
+        sources_raw = result.get("sources", [])
+
+        return QueryResponse(
+            answer=result.get("answer", ""),
+            sources=[
+                Source(
+                    type=s.get("type", "unknown"),
+                    doc_id=s.get("doc_id") or s.get("id"),
+                )
+                for s in sources_raw
+            ],
+            agent_trace=AgentTrace(
+                router_decision=result.get("router_decision", ""),
+                crag_confidence_score=round(
+                    result.get("crag_confidence_score", 0.0), 2
+                ),
+                retrieval_attempts=result.get("retrieval_attempts", 0),
+            ),
+            metrics=QueryMetrics(
+                latency_ms=round(elapsed_ms, 2),
+                tokens_used=result.get("tokens_used", 0),
+            ),
+        )
+    except Exception as exc:
+        logger.error("multimodal_pipeline_failed", error=str(exc))
+        elapsed_ms = (time.perf_counter() - start_time) * 1000
+        return QueryResponse(
+            answer="An error occurred while processing your image query.",
             agent_trace=AgentTrace(
                 router_decision="error",
                 crag_confidence_score=0.0,

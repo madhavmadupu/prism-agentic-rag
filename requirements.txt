@@ -24,6 +24,9 @@ langgraph>=0.2.0
 # ── Graph Database ──
 neo4j>=5.20.0
 
+# ── MCP & Live Data ──
+yfinance>=0.1.70
+
 # ── Utilities ──
 tiktoken>=0.8.0
 python-multipart>=0.0.12

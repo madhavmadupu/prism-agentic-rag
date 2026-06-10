@@ -22,6 +22,8 @@ class AgentState(TypedDict):
     max_retrieval_attempts: int
     rewritten_query: str
 
+    multimodal_data: dict | None
+
     answer: str
     sources: list
     latency_ms: float
@@ -41,6 +43,7 @@ def make_initial_state(query: str, mode: str = "auto", include_multimodal: bool 
         "retrieval_attempts": 0,
         "max_retrieval_attempts": 3,
         "rewritten_query": "",
+        "multimodal_data": None,
         "answer": "",
         "sources": [],
         "latency_ms": 0.0,
