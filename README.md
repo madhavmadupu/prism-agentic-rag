@@ -162,4 +162,4 @@ MIT License. See [LICENSE](LICENSE) for details.
 
 ---
 
-*P.R.I.S.M. demonstrates the next generation of enterprise AI systems. 16 components, 40+ test cases, 6-phase architecture built over 16 atomic commits.*
+*P.R.I.S.M. demonstrates the next generation of enterprise AI systems. 16 components, 40+ test cases, 6-phase architecture.*
