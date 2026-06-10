@@ -71,6 +71,8 @@ graph TD
     N[Redis] -.->|Semantic Cache| B
 ```
 
+<img src="docs/architecture.png" alt="P.R.I.S.M. Architecture Diagram" width="800">
+
 ---
 
 ## Quick Start
