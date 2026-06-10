@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import time
+import uuid
 
 from fastapi import APIRouter
 
+from src.agents.graph import prism_app
+from src.agents.state import make_initial_state
 from src.api.models import (
     AgentTrace,
     QueryMetrics,
@@ -39,33 +42,62 @@ async def query(request: QueryRequest) -> QueryResponse:
         user_id=request.user_id,
     )
 
-    # TODO: Phase 2+ will replace this with LangGraph agentic orchestration
-    answer = (
-        f"P.R.I.S.M. received your query: '{request.query}'. "
-        "The agentic pipeline is under construction. "
-        "Full implementation coming in Phase 3."
+    thread_id = str(uuid.uuid4())
+    initial_state = make_initial_state(
+        query=request.query,
+        mode=request.mode,
+        include_multimodal=request.include_multimodal,
     )
 
-    elapsed_ms = (time.perf_counter() - start_time) * 1000
+    try:
+        result = await prism_app.ainvoke(
+            initial_state,
+            config={"configurable": {"thread_id": thread_id}},
+        )
 
-    return QueryResponse(
-        answer=answer,
-        sources=[
+        elapsed_ms = (time.perf_counter() - start_time) * 1000
+
+        sources_raw = result.get("sources", [])
+        sources = [
             Source(
-                type="vector",
-                doc_id="placeholder",
+                type=s.get("type", "unknown"),
+                doc_id=s.get("doc_id") or s.get("id"),
+                page=s.get("page"),
             )
-        ],
-        agent_trace=AgentTrace(
-            router_decision="pending",
-            crag_confidence_score=0.0,
-            retrieval_attempts=0,
-        ),
-        metrics=QueryMetrics(
-            latency_ms=round(elapsed_ms, 2),
-            tokens_used=0,
-        ),
-    )
+            for s in sources_raw
+        ]
+
+        return QueryResponse(
+            answer=result.get("answer", ""),
+            sources=sources,
+            agent_trace=AgentTrace(
+                router_decision=result.get("router_decision", ""),
+                crag_confidence_score=round(
+                    result.get("crag_confidence_score", 0.0), 2
+                ),
+                retrieval_attempts=result.get("retrieval_attempts", 0),
+            ),
+            metrics=QueryMetrics(
+                latency_ms=round(elapsed_ms, 2),
+                tokens_used=result.get("tokens_used", 0),
+            ),
+        )
+
+    except Exception as exc:
+        logger.error("pipeline_failed", error=str(exc), query=request.query[:60])
+        elapsed_ms = (time.perf_counter() - start_time) * 1000
+        return QueryResponse(
+            answer="An error occurred while processing your query. Please try again.",
+            agent_trace=AgentTrace(
+                router_decision="error",
+                crag_confidence_score=0.0,
+                retrieval_attempts=0,
+            ),
+            metrics=QueryMetrics(
+                latency_ms=round(elapsed_ms, 2),
+                tokens_used=0,
+            ),
+        )
 
 
 @router.get("/health")
