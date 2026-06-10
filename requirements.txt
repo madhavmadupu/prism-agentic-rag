@@ -21,6 +21,9 @@ langchain-cohere>=0.3.0
 langchain-openai>=0.2.0
 langgraph>=0.2.0
 
+# ── Graph Database ──
+neo4j>=5.20.0
+
 # ── Utilities ──
 tiktoken>=0.8.0
 python-multipart>=0.0.12
